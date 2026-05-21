@@ -32,6 +32,7 @@ const userSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+      index: true,
     },
     avatar: {
       type: String, // cloudinary url
@@ -67,6 +68,9 @@ const userSchema = new Schema(
   },
   { timestamps: true }
 );
+
+userSchema.index({ createdAt: -1 });
+userSchema.index({ isEmailVerified: 1, createdAt: -1 });
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {

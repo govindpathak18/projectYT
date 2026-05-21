@@ -15,6 +15,7 @@ const videoSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
     title: {
       type: String,
@@ -38,9 +39,29 @@ const videoSchema = new Schema(
       type: Boolean,
       default: true,
     },
+    publishedAt: {
+      type: Date,
+      default: function () {
+        return this.isPublished ? new Date() : null;
+      },
+    },
   },
   { timestamps: true }
 );
+
+videoSchema.index({ owner: 1, createdAt: -1 });
+videoSchema.index({ owner: 1, isPublished: 1, createdAt: -1 });
+videoSchema.index({ owner: 1, views: -1 });
+videoSchema.index({ isPublished: 1, createdAt: -1 });
+videoSchema.index({ title: "text", description: "text" });
+
+videoSchema.pre("save", function (next) {
+  if (this.isModified("isPublished")) {
+    this.publishedAt = this.isPublished ? new Date() : null;
+  }
+
+  next();
+});
 
 videoSchema.plugin(mongooseAggregatePaginate);
 
