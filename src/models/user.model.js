@@ -129,5 +129,6 @@ userSchema.methods.isEmailVerificationOtpValid = function (otp) {
 };
 
 userSchema.plugin(mongooseAggregatePaginate);
+// Pagination means: instead of sending all data at once, we send it page by page.
 
 export const User = mongoose.model("User", userSchema);
