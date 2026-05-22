@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import fs from "fs";
+import jwt from "jsonwebtoken";
 
 import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -333,9 +334,57 @@ const verifyEmail = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Email verified successfully"));
 });
 
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  const cookieToken = req.cookies && req.cookies.refreshToken; // Try to get refresh token from cookies
+  const header = req.headers.authorization; // Or from Authorization header
+  const bearerToken = header && header.startsWith("Bearer ") ? header.split(" ")[1] : null;
 
+  const incomingRefreshToken = cookieToken || bearerToken;
 
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Unauthorized request");
+  }
 
+  let decoded; // decoded refresh token should contain user _id
+  try {
+    decoded = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
+  } catch (err) {
+    throw new ApiError(401, "Invalid or expired refresh token");
+  }
 
+  const user = await User.findById(decoded._id).select("+refreshToken");
 
-export { forgotPassword, loginUser, registerUser, resetPassword, verifyEmail, logoutUser };
+  if (!user) {
+    throw new ApiError(401, "User not found");
+  }
+
+  // Verify that the incoming refresh token matches the one stored in database
+  if (incomingRefreshToken !== user.refreshToken) {
+    throw new ApiError(401, "Refresh token has been revoked or does not match");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, cookieOptions)
+    .cookie("refreshToken", refreshToken, cookieOptions)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          accessToken,
+          refreshToken,
+        },
+        "Access token refreshed successfully"
+      )
+    );
+});
+
+export { forgotPassword, loginUser, registerUser, resetPassword, verifyEmail, logoutUser, refreshAccessToken };

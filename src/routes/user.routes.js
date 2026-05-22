@@ -7,6 +7,7 @@ import {
   resetPassword,
   verifyEmail,
   logoutUser,
+  refreshAccessToken,
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
@@ -89,6 +90,16 @@ router.route("/reset-password").post(resetPassword);
  * @mount /api/v1/users
  */
 router.route("/logout").post(authenticate, logoutUser);
+
+/**
+ * @route POST /refresh-token
+ * @description Refresh access token using a valid refresh token from cookie or header.
+ * @access Public
+ * @mount /api/v1/users
+ * @header {string} Authorization - Optional: Bearer <refreshToken>
+ * @cookie {string} refreshToken - Optional: refresh token from cookies
+ */
+router.route("/refresh-token").post(refreshAccessToken);
 
 
 
