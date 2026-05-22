@@ -41,4 +41,22 @@ const sendEmailVerificationOtp = async ({ email, fullName, otp }) => {
   });
 };
 
-export { sendEmail, sendEmailVerificationOtp };
+const sendPasswordResetOtp = async ({ email, fullName, otp }) => {
+  return sendEmail({
+    to: email,
+    subject: "Reset your password",
+    text: `Hi ${fullName}, your password reset OTP is ${otp}. It will expire in 10 minutes.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <h2>Reset your password</h2>
+        <p>Hi ${fullName},</p>
+        <p>Your password reset OTP is:</p>
+        <h1 style="letter-spacing: 6px;">${otp}</h1>
+        <p>This OTP will expire in 10 minutes.</p>
+        <p>If you did not request this, you can ignore this email.</p>
+      </div>
+    `,
+  });
+};
+
+export { sendEmail, sendEmailVerificationOtp, sendPasswordResetOtp };

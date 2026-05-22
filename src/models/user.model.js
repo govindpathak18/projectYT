@@ -65,6 +65,14 @@ const userSchema = new Schema(
     emailVerifiedAt: {
       type: Date,
     },
+    passwordResetOtp: {
+      type: String,
+      select: false,
+    },
+    passwordResetOtpExpiry: {
+      type: Date,
+      select: false,
+    },
   },
   { timestamps: true }
 );
@@ -129,6 +137,27 @@ userSchema.methods.isEmailVerificationOtpValid = function (otp) {
   return (
     this.emailVerificationOtp === hashedOtp &&
     this.emailVerificationOtpExpiry > new Date()
+  );
+};
+
+userSchema.methods.setPasswordResetOtp = function (otp) {
+  this.passwordResetOtp = crypto
+    .createHash("sha256")
+    .update(String(otp))
+    .digest("hex");
+  this.passwordResetOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+};
+
+userSchema.methods.isPasswordResetOtpValid = function (otp) {
+  if (!this.passwordResetOtp || !this.passwordResetOtpExpiry) {
+    return false;
+  }
+
+  const hashedOtp = crypto.createHash("sha256").update(String(otp)).digest("hex");
+
+  return (
+    this.passwordResetOtp === hashedOtp &&
+    this.passwordResetOtpExpiry > new Date()
   );
 };
 

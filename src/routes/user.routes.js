@@ -1,7 +1,15 @@
 import { Router } from "express";
 
-import { registerUser } from "../controllers/user.controller.js";
+import {
+  forgotPassword,
+  loginUser,
+  registerUser,
+  resetPassword,
+  verifyEmail,
+  logoutUser,
+} from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
+import { authenticate } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
@@ -30,5 +38,59 @@ router.route("/register").post(
   ]),
   registerUser
 );
+
+/**
+ * @route POST /login
+ * @description Login with email or username and password.
+ * @access Public
+ * @mount /api/v1/users
+ * @body {string} email - User email. Required if username is not provided.
+ * @body {string} username - Username. Required if email is not provided.
+ * @body {string} password - User password.
+ */
+router.route("/login").post(loginUser);
+
+/**
+ * @route POST /verify-email
+ * @description Verify a user's email using the OTP sent by email.
+ * @access Public
+ * @body {string} email - Registered user email.
+ * @body {string} otp - OTP sent to the user's email.
+ */
+router.route("/verify-email").post(verifyEmail);
+
+/**
+ * @route POST /forgot-password
+ * @description Send a password reset OTP to the user's email.
+ * @access Public
+ * @mount /api/v1/users
+ * @body {string} email - Registered user email.
+ */
+router.route("/forgot-password").post(forgotPassword);
+
+/**
+ * @route POST /reset-password
+ * @description Reset password using email and password reset OTP.
+ * @access Public
+ * @mount /api/v1/users
+ * @body {string} email - Registered user email.
+ * @body {string} otp - Password reset OTP sent by email.
+ * @body {string} newPassword - New password to save.
+ */
+router.route("/reset-password").post(resetPassword);
+
+
+//secured routes
+
+/**
+ * @route POST /logout
+ * @description Log out the authenticated user, clear cookies, and revoke refresh token.
+ * @access Private
+ * @mount /api/v1/users
+ */
+router.route("/logout").post(authenticate, logoutUser);
+
+
+
 
 export default router;
