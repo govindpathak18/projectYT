@@ -3,10 +3,12 @@ import fs from "fs";
 import jwt from "jsonwebtoken";
 
 import { User } from "../models/user.model.js";
+import { Subscription } from "../models/subscription.model.js";
+import { Video } from "../models/video.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { deleteFromCloudinary, uploadOnCloudinary } from "../utils/cloudinary.js";
 import {
   sendEmailVerificationOtp,
   sendPasswordResetOtp,
@@ -399,6 +401,247 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, { user }, "Current user fetched successfully"));
 });
 
+// (**)
+const getUserProfile = asyncHandler(async (req, res) => {
+
+  // logged in user
+  const { username } = req.params;
+
+  if (!username || username.trim() === "") {
+    throw new ApiError(400, "Username is required");
+  }
+
+  const normalizedUsername = username.trim().toLowerCase();
+
+  // First pipeline: fetch the channel's base profile and the public relationship data.
+  const [channelProfile] = await User.aggregate([
+    // Find the channel by username.
+    { $match: { username: normalizedUsername } },
+
+    // Pull the counts for people who subscribe to this channel and channels this user follows.
+    {
+      $lookup: {
+        from: "subscriptions",
+        let: { channelId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$channel", "$$channelId"] },
+            },
+          },
+          { $count: "count" },
+        ],
+        as: "subscriberCountDocs",
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        let: { channelId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$subscriber", "$$channelId"] },
+            },
+          },
+          { $count: "count" },
+        ],
+        as: "subscribedCountDocs",
+      },
+    },
+
+    // Pull the public list of channels this profile owner is following.
+    {
+      $lookup: {
+        from: "subscriptions",
+        let: { channelId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: { $eq: ["$subscriber", "$$channelId"] },
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "channel",
+              foreignField: "_id",
+              as: "channelDoc",
+            },
+          },
+          { $unwind: { path: "$channelDoc", preserveNullAndEmptyArrays: true } },
+          { $replaceRoot: { newRoot: "$channelDoc" } },
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              fullName: 1,
+              avatar: 1,
+              coverImage: 1,
+              bio: 1,
+            },
+          },
+        ],
+        as: "subscribedAccounts",
+      },
+    },
+
+    // Return only the fields needed for the response.
+    {
+      $project: {
+        _id: 1,
+        username: 1,
+        fullName: 1,
+        bio: 1,
+        avatar: 1,
+        coverImage: 1,
+        subscriberCount: {
+          $ifNull: [{ $arrayElemAt: ["$subscriberCountDocs.count", 0] }, 0],
+        },
+        subscribedCount: {
+          $ifNull: [{ $arrayElemAt: ["$subscribedCountDocs.count", 0] }, 0],
+        },
+        subscribedAccounts: 1,
+      },
+    },
+  ]);
+
+  if (!channelProfile) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // We still need a separate boolean check for whether the current viewer is already subscribed.
+  // This is a small targeted query and keeps the pipeline focused on profile data.
+  const isOwner = req.user && req.user._id.toString() === channelProfile._id.toString();
+  const isSubscribed = req.user
+    ? await Subscription.exists({
+      subscriber: req.user._id,
+      channel: channelProfile._id,
+    })
+    : false;
+
+  // Fetch the channel's videos. Public viewers only get published videos, while the owner can see all uploads.
+  const videos = await Video.aggregate([
+    {
+      $match: isOwner
+        ? { owner: channelProfile._id }
+        : { owner: channelProfile._id, isPublished: true },
+    },
+    {
+      $sort: { createdAt: -1 },
+    },
+    {
+      $project: {
+        _id: 1,
+        title: 1,
+        description: 1,
+        thumbnail: 1,
+        videoFile: 1,
+        duration: 1,
+        views: 1,
+        isPublished: 1,
+        createdAt: 1,
+      },
+    },
+  ]);
+
+  // If the viewer is the owner, fetch the owner-only list of users who subscribe to this channel.
+  let subscriberAccounts = [];
+
+  if (isOwner) {
+    const [ownerData] = await User.aggregate([
+      { $match: { _id: channelProfile._id } },
+      {
+        $lookup: {
+          from: "subscriptions",
+          let: { channelId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$channel", "$$channelId"] },
+              },
+            },
+            {
+              $lookup: {
+                from: "users",
+                localField: "subscriber",
+                foreignField: "_id",
+                as: "subscriberDoc",
+              },
+            },
+            { $unwind: { path: "$subscriberDoc", preserveNullAndEmptyArrays: true } },
+            { $replaceRoot: { newRoot: "$subscriberDoc" } },
+            {
+              $project: {
+                _id: 1,
+                username: 1,
+                fullName: 1,
+                avatar: 1,
+                coverImage: 1,
+                bio: 1,
+              },
+            },
+          ],
+          as: "subscriberAccounts",
+        },
+      },
+      {
+        $project: {
+          subscriberAccounts: 1,
+        },
+      },
+    ]);
+
+    subscriberAccounts = ownerData?.subscriberAccounts || [];
+  }
+
+  const profile = {
+    username: channelProfile.username,
+    fullName: channelProfile.fullName,
+    bio: channelProfile.bio || "",
+    avatar: channelProfile.avatar,
+    coverImage: channelProfile.coverImage || "",
+    subscriberCount: channelProfile.subscriberCount,
+    subscribedCount: channelProfile.subscribedCount,
+    subscribedAccounts: channelProfile.subscribedAccounts,
+    isSubscribed,
+    videos,
+  };
+
+  if (isOwner) {
+    profile.subscriberAccounts = subscriberAccounts;
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { profile }, "User profile fetched successfully"));
+});
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+  const user = req.user;
+
+  if (!user) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  const userWithWatchHistory = await User.findById(user._id)
+    .populate({
+      path: "watchHistory",
+      select:
+        "_id title description thumbnail videoFile duration views isPublished createdAt updatedAt",
+      options: { sort: { createdAt: -1 } },
+    })
+    .select("watchHistory");
+
+  const watchHistory = userWithWatchHistory?.watchHistory || [];
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, { watchHistory }, "Watch history fetched successfully")
+    );
+});
+
 const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 
@@ -431,7 +674,7 @@ const changePassword = asyncHandler(async (req, res) => {
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
-  const { fullName, username, email } = req.body;
+  const { fullName, username, email, bio } = req.body;
 
   if (!fullName || !username || !email) {
     throw new ApiError(400, "Full name, username, and email are required");
@@ -453,6 +696,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
   req.user.fullName = fullName.trim();
   req.user.username = normalizedUsername;
   req.user.email = normalizedEmail;
+  req.user.bio = typeof bio === "string" ? bio.trim() : "";
 
   await req.user.save({ validateBeforeSave: false });
 
@@ -480,6 +724,10 @@ const updateAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Failed to upload avatar");
   }
 
+  if (req.user.avatar) {
+    await deleteFromCloudinary(req.user.avatar);
+  }
+
   req.user.avatar = avatar.secure_url;
   await req.user.save({ validateBeforeSave: false });
 
@@ -499,6 +747,10 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 
   if (!coverImage) {
     throw new ApiError(500, "Failed to upload cover image");
+  }
+
+  if (req.user.coverImage) {
+    await deleteFromCloudinary(req.user.coverImage);
   }
 
   req.user.coverImage = coverImage.secure_url;
@@ -521,6 +773,8 @@ export {
   refreshAccessToken,
   changePassword,
   getCurrentUser,
+  getUserProfile,
+  getWatchHistory,
   updateAccountDetails,
   updateAvatar,
   updateCoverImage

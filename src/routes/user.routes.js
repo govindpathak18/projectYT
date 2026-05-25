@@ -9,6 +9,8 @@ import {
   logoutUser,
   refreshAccessToken,
   getCurrentUser,
+  getUserProfile,
+  getWatchHistory,
   changePassword,
   updateAccountDetails,
   updateAvatar,
@@ -132,6 +134,20 @@ router
  * @access Private
  */
 router.route("/current-user").get(authenticate, getCurrentUser);
+
+/**
+ * @route GET /profile/:username
+ * @description Get a public user profile by username.
+ * @access Public
+ */
+router.route("/profile/:username").get(getUserProfile);
+
+/**
+ * @route GET /watch-history
+ * @description Get the authenticated user's watch history.
+ * @access Private
+ */
+router.route("/watch-history").get(authenticate, getWatchHistory);
 
 /**
  * @route PATCH /update-account-details

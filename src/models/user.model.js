@@ -41,6 +41,11 @@ const userSchema = new Schema(
     coverImage: {
       type: String,
     },
+    bio: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     password: {
       type: String,
       required: true,

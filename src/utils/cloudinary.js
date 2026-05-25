@@ -25,10 +25,30 @@ const uploadOnCloudinary = async (localFilePath) => {
   }
 };
 
+const deleteFromCloudinary = async (cloudinaryUrl) => {
+  if (!cloudinaryUrl) {
+    return;
+  }
+
+  try {
+    const publicId = cloudinaryUrl.split("/").slice(-2).join("/").split(".")[0];
+
+    if (!publicId) {
+      return;
+    }
+
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: "image",
+    });
+  } catch (error) {
+    return;
+  }
+};
+
 const removeLocalFile = (localFilePath) => {
   if (localFilePath && fs.existsSync(localFilePath)) {
     fs.unlinkSync(localFilePath);
   }
 };
 
-export { uploadOnCloudinary };
+export { deleteFromCloudinary, uploadOnCloudinary };
