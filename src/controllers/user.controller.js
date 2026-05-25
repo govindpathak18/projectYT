@@ -387,4 +387,141 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     );
 });
 
-export { forgotPassword, loginUser, registerUser, resetPassword, verifyEmail, logoutUser, refreshAccessToken };
+const getCurrentUser = asyncHandler(async (req, res) => {
+  const user = req.user;
+
+  if (!user) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { user }, "Current user fetched successfully"));
+});
+
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  // Validate required inputs before touching the database.
+  if (!currentPassword || !newPassword || currentPassword.trim() === "" || newPassword.trim() === "") {
+    throw new ApiError(400, "Current password and new password are required");
+  }
+
+  const user = await User.findById(req.user?._id).select("+password");
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Confirm current password matches the stored hash.
+  const isCurrentPasswordValid = await user.isPasswordCorrect(currentPassword);
+
+  if (!isCurrentPasswordValid) {
+    throw new ApiError(401, "Current password is incorrect");
+  }
+
+  // Assigning password will trigger the pre-save hook to hash it.
+  user.password = newPassword;
+  user.refreshToken = undefined;
+  await user.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password changed successfully"));
+});
+
+const updateAccountDetails = asyncHandler(async (req, res) => {
+  const { fullName, username, email } = req.body;
+
+  if (!fullName || !username || !email) {
+    throw new ApiError(400, "Full name, username, and email are required");
+  }
+
+  const normalizedUsername = username.trim().toLowerCase();
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const existingUser = await User.findOne({
+    _id: { $ne: req.user?._id },
+    $or: [{ username: normalizedUsername }, { email: normalizedEmail }],
+  });
+
+  if (existingUser) {
+    throw new ApiError(409, "Username or email already exists");
+  }
+
+  //update details
+  req.user.fullName = fullName.trim();
+  req.user.username = normalizedUsername;
+  req.user.email = normalizedEmail;
+
+  await req.user.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        { user: req.user },
+        "Account details updated successfully"
+      )
+    );
+});
+
+const updateAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req.files?.avatar?.[0]?.path;
+
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar image is required");
+  }
+
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+  if (!avatar) {
+    throw new ApiError(500, "Failed to upload avatar");
+  }
+
+  req.user.avatar = avatar.secure_url;
+  await req.user.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { user: req.user }, "Avatar updated successfully"));
+});
+
+const updateCoverImage = asyncHandler(async (req, res) => {
+  const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
+
+  if (!coverImageLocalPath) {
+    throw new ApiError(400, "Cover image is required");
+  }
+
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+  if (!coverImage) {
+    throw new ApiError(500, "Failed to upload cover image");
+  }
+
+  req.user.coverImage = coverImage.secure_url;
+  await req.user.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, { user: req.user }, "Cover image updated successfully")
+    );
+});
+
+export {
+  forgotPassword,
+  loginUser,
+  registerUser,
+  resetPassword,
+  verifyEmail,
+  logoutUser,
+  refreshAccessToken,
+  changePassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateAvatar,
+  updateCoverImage
+};

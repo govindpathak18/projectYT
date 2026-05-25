@@ -8,6 +8,11 @@ import {
   verifyEmail,
   logoutUser,
   refreshAccessToken,
+  getCurrentUser,
+  changePassword,
+  updateAccountDetails,
+  updateAvatar,
+  updateCoverImage,
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { authenticate } from "../middlewares/auth.middleware.js";
@@ -101,7 +106,50 @@ router.route("/logout").post(authenticate, logoutUser);
  */
 router.route("/refresh-token").post(refreshAccessToken);
 
+/**
+ * @route PATCH /update-avatar
+ * @description Update the authenticated user's avatar image.
+ * @access Private
+ * @file {File} avatar - Required avatar image.
+ */
+router
+  .route("/update-avatar")
+  .patch(authenticate, upload.single("avatar"), updateAvatar);
 
+/**
+ * @route PATCH /update-cover-image
+ * @description Update the authenticated user's cover image.
+ * @access Private
+ * @file {File} coverImage - Required cover image.
+ */
+router
+  .route("/update-cover-image")
+  .patch(authenticate, upload.single("coverImage"), updateCoverImage);
 
+/**
+ * @route GET /current-user
+ * @description Get the authenticated user's profile.
+ * @access Private
+ */
+router.route("/current-user").get(authenticate, getCurrentUser);
+
+/**
+ * @route PATCH /update-account-details
+ * @description Update the authenticated user's profile details.
+ * @access Private
+ * @body {string} fullName - User's display name.
+ * @body {string} username - Unique username.
+ * @body {string} email - User email.
+ */
+router.route("/update-account-details").patch(authenticate, updateAccountDetails);
+
+/**
+ * @route PATCH /change-password
+ * @description Change the authenticated user's password.
+ * @access Private
+ * @body {string} currentPassword - User's current password.
+ * @body {string} newPassword - New password to save.
+ */
+router.route("/change-password").patch(authenticate, changePassword);
 
 export default router;
