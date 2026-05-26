@@ -6,11 +6,14 @@ import {
   registerUser,
   resetPassword,
   verifyEmail,
+  resendVerificationOtp,
   logoutUser,
   refreshAccessToken,
   getCurrentUser,
   getUserProfile,
   getWatchHistory,
+  subscribeToChannel,
+  unsubscribeFromChannel,
   changePassword,
   updateAccountDetails,
   updateAvatar,
@@ -66,6 +69,14 @@ router.route("/login").post(loginUser);
  * @body {string} otp - OTP sent to the user's email.
  */
 router.route("/verify-email").post(verifyEmail);
+
+/**
+ * @route POST /resend-verification-otp
+ * @description Resend the email verification OTP to the registered user.
+ * @access Public
+ * @body {string} email - Registered user email.
+ */
+router.route("/resend-verification-otp").post(resendVerificationOtp);
 
 /**
  * @route POST /forgot-password
@@ -141,6 +152,20 @@ router.route("/current-user").get(authenticate, getCurrentUser);
  * @access Public
  */
 router.route("/profile/:username").get(getUserProfile);
+
+/**
+ * @route POST /subscribe/:channelId
+ * @description Subscribe the authenticated user to a channel.
+ * @access Private
+ */
+router.route("/subscribe/:channelId").post(authenticate, subscribeToChannel);
+
+/**
+ * @route DELETE /unsubscribe/:channelId
+ * @description Unsubscribe the authenticated user from a channel.
+ * @access Private
+ */
+router.route("/unsubscribe/:channelId").delete(authenticate, unsubscribeFromChannel);
 
 /**
  * @route GET /watch-history

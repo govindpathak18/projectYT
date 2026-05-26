@@ -336,6 +336,41 @@ const verifyEmail = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Email verified successfully"));
 });
 
+const resendVerificationOtp = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || email.trim() === "") {
+    throw new ApiError(400, "Email is required");
+  }
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+
+  if (!user) {
+    throw new ApiError(404, "User with this email does not exist");
+  }
+
+  if (user.isEmailVerified) {
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {}, "Email is already verified"));
+  }
+
+  const emailVerificationOtp = generateOtp();
+
+  user.setEmailVerificationOtp(emailVerificationOtp);
+  await user.save({ validateBeforeSave: false });
+
+  await sendEmailVerificationOtp({
+    email: user.email,
+    fullName: user.fullName,
+    otp: emailVerificationOtp,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Verification OTP resent successfully"));
+});
+
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const cookieToken = req.cookies && req.cookies.refreshToken; // Try to get refresh token from cookies
   const header = req.headers.authorization; // Or from Authorization header
@@ -617,6 +652,85 @@ const getUserProfile = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, { profile }, "User profile fetched successfully"));
 });
 
+const subscribeToChannel = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const { channelId } = req.params;
+
+  if (!user) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  if (!channelId || channelId.trim() === "") {
+    throw new ApiError(400, "Channel ID is required");
+  }
+
+  if (user._id.toString() === channelId) {
+    throw new ApiError(400, "You cannot subscribe to yourself");
+  }
+
+  const channel = await User.findById(channelId);
+
+  if (!channel) {
+    throw new ApiError(404, "Channel not found");
+  }
+
+  const existingSubscription = await Subscription.findOne({
+    subscriber: user._id,
+    channel: channel._id,
+  });
+
+  if (existingSubscription) {
+    throw new ApiError(409, "You are already subscribed to this channel");
+  }
+
+  const subscription = await Subscription.create({
+    subscriber: user._id,
+    channel: channel._id,
+  });
+
+  return res
+    .status(201)
+    .json(
+      new ApiResponse(
+        201,
+        { subscription },
+        "Subscribed to channel successfully"
+      )
+    );
+});
+
+const unsubscribeFromChannel = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const { channelId } = req.params;
+
+  if (!user) {
+    throw new ApiError(401, "User not authenticated");
+  }
+
+  if (!channelId || channelId.trim() === "") {
+    throw new ApiError(400, "Channel ID is required");
+  }
+
+  const channel = await User.findById(channelId);
+
+  if (!channel) {
+    throw new ApiError(404, "Channel not found");
+  }
+
+  const deletedSubscription = await Subscription.findOneAndDelete({
+    subscriber: user._id,
+    channel: channel._id,
+  });
+
+  if (!deletedSubscription) {
+    throw new ApiError(404, "Subscription not found");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Unsubscribed from channel successfully"));
+});
+
 const getWatchHistory = asyncHandler(async (req, res) => {
   const user = req.user;
 
@@ -769,12 +883,15 @@ export {
   registerUser,
   resetPassword,
   verifyEmail,
+  resendVerificationOtp,
   logoutUser,
   refreshAccessToken,
   changePassword,
   getCurrentUser,
   getUserProfile,
   getWatchHistory,
+  subscribeToChannel,
+  unsubscribeFromChannel,
   updateAccountDetails,
   updateAvatar,
   updateCoverImage

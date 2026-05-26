@@ -27,6 +27,28 @@ const videoSchema = new Schema(
       type: String,
       trim: true,
     },
+    summary: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    tags: {
+      type: [String],
+      default: [],
+      trim: true,
+    },
+    category: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+    },
+    language: {
+      type: String,
+      trim: true,
+      default: "en",
+      index: true,
+    },
     duration: {
       type: Number,
       required: true,
